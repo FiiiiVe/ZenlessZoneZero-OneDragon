@@ -1,5 +1,6 @@
 import os
 import shutil
+import configparser
 from typing import Optional, List
 
 from one_dragon.base.config.yaml_operator import YamlOperator
@@ -34,6 +35,11 @@ class YamlConfig(YamlOperator):
 
         YamlOperator.__init__(self, self._get_yaml_file_path())
 
+    def _get_base_dir(self):
+        config = configparser.ConfigParser()
+        config.read('sync-config.ini')
+        return config.get('Paths', 'base_dir')
+
     def _get_yaml_file_path(self) -> Optional[str]:
         """
         获取配置文件的路径
@@ -48,8 +54,9 @@ class YamlConfig(YamlOperator):
         if self.sub_dir is not None:
             sub_dir = sub_dir + self.sub_dir
 
-        yml_path = os.path.join(os_utils.get_path_under_work_dir(*sub_dir), f'{self.module_name}.yml')
-        sample_yml_path = os.path.join(os_utils.get_path_under_work_dir(*sub_dir), f'{self.module_name}.sample.yml')
+        base_dir = self._get_base_dir()  # 读取指定的base_dir
+        yml_path = os.path.join(base_dir, *sub_dir, f'{self.module_name}.yml')
+        sample_yml_path = os.path.join(base_dir, *sub_dir, f'{self.module_name}.sample.yml')
         usage_yml_path = sample_yml_path if self._sample and not os.path.exists(yml_path) else yml_path
         use_sample = self._sample and not os.path.exists(yml_path)
 
