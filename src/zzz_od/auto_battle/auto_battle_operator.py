@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import os
 from typing import List, Optional, Tuple
@@ -9,7 +10,7 @@ from one_dragon.base.conditional_operation.operation_def import OperationDef
 from one_dragon.base.conditional_operation.operation_template import OperationTemplate
 from one_dragon.base.conditional_operation.state_handler_template import StateHandlerTemplate
 from one_dragon.base.conditional_operation.state_recorder import StateRecorder
-from one_dragon.utils import os_utils
+from one_dragon.utils import os_utils, thread_utils
 from one_dragon.utils.log_utils import log
 from zzz_od.auto_battle.atomic_op.btn_chain_left import AtomicBtnChainLeft
 from zzz_od.auto_battle.atomic_op.btn_chain_right import AtomicBtnChainRight
@@ -27,12 +28,16 @@ from zzz_od.auto_battle.atomic_op.btn_switch_prev import AtomicBtnSwitchPrev
 from zzz_od.auto_battle.atomic_op.btn_ultimate import AtomicBtnUltimate
 from zzz_od.auto_battle.atomic_op.state_clear import AtomicClearState
 from zzz_od.auto_battle.atomic_op.state_set import AtomicSetState
+from zzz_od.auto_battle.atomic_op.switch_agent import AtomicSwitchAgent
 from zzz_od.auto_battle.atomic_op.wait import AtomicWait
 from zzz_od.auto_battle.auto_battle_context import AutoBattleContext
 from zzz_od.auto_battle.auto_battle_dodge_context import YoloStateEventEnum
 from zzz_od.auto_battle.auto_battle_state import BattleStateEnum
 from zzz_od.context.zzz_context import ZContext
 from zzz_od.game_data.agent import AgentEnum, AgentTypeEnum, CommonAgentStateEnum
+
+
+_auto_battle_operator_executor = ThreadPoolExecutor(thread_name_prefix='_auto_battle_operator_executor', max_workers=1)
 
 
 class AutoBattleOperator(ConditionalOperator):
@@ -51,6 +56,9 @@ class AutoBattleOperator(ConditionalOperator):
         self._mutex_list: dict[str, List[str]] = {}
 
         self.auto_battle_context: AutoBattleContext = AutoBattleContext(ctx)
+
+        # 锁定敌人
+        self.last_lock_time: float = 0  # 上一次锁定的时间
 
     def init_before_running(self) -> Tuple[bool, str]:
         """
@@ -154,6 +162,7 @@ class AutoBattleOperator(ConditionalOperator):
             event_ids.append('连携技-1-' + agent.agent_name)
             event_ids.append('连携技-2-' + agent.agent_name)
             event_ids.append('快速支援-' + agent.agent_name)
+            event_ids.append('切换角色-' + agent.agent_name)
 
             if agent.state_list is not None:
                 for state in agent.state_list:
@@ -168,6 +177,7 @@ class AutoBattleOperator(ConditionalOperator):
             event_ids.append('连携技-1-' + agent_type_enum.value)
             event_ids.append('连携技-2-' + agent_type_enum.value)
             event_ids.append('快速支援-' + agent_type_enum.value)
+            event_ids.append('切换角色-' + agent_type_enum.value)
 
         for state_enum in CommonAgentStateEnum:
             common_agent_state = state_enum.value
@@ -259,6 +269,8 @@ class AutoBattleOperator(ConditionalOperator):
             return AtomicSetState(self.auto_battle_context.custom_context, op_def)
         elif op_name == AtomicClearState.OP_NAME:
             return AtomicClearState(self.auto_battle_context.custom_context, op_def)
+        elif op_name == AtomicSwitchAgent.OP_NAME:
+            return AtomicSwitchAgent(self.auto_battle_context, op_def)
         else:
             raise ValueError('非法的指令 %s' % op_name)
 
@@ -334,10 +346,35 @@ class AutoBattleOperator(ConditionalOperator):
         success = ConditionalOperator.start_running_async(self)
         if success:
             self.auto_battle_context.start_context()
+            lock_f = _auto_battle_operator_executor.submit(self.lock_periodically)
+            lock_f.add_done_callback(thread_utils.handle_future_result)
+
         return success
 
+    def lock_periodically(self) -> None:
+        """
+        周期性锁定敌人
+        :return:
+        """
+        interval = self.get('auto_lock_interval', 0)
+        if interval <= 0:  # 不开启自动锁定
+            return
+        op = AtomicBtnLock(self.auto_battle_context)
+        while self.is_running:
+            since_last = time.time() - self.last_lock_time  # 上次锁定到现在的秒数
+            if since_last <= interval:  # 每固定秒数 锁定一次
+                time.sleep(interval - since_last)
+                continue
 
-if __name__ == '__main__':
+            if not self.auto_battle_context.last_check_in_battle:  # 当前画面不是战斗画面 就不锁定
+                time.sleep(0.5)
+                continue
+
+            op.execute()
+            self.last_lock_time = time.time()
+
+
+def __debug():
     ctx = ZContext()
     ctx.init_by_config()
     auto_op = AutoBattleOperator(ctx, 'auto_battle', '测试')
@@ -345,3 +382,7 @@ if __name__ == '__main__':
     auto_op.start_running_async()
     time.sleep(5)
     auto_op.stop_running()
+
+
+if __name__ == '__main__':
+    __debug()

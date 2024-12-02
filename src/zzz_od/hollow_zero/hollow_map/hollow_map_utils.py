@@ -12,7 +12,7 @@ def construct_map_from_yolo_result(
         ctx: ZContext,
         detect_result: DetectFrameResult,
         name_2_entry: dict[str, HollowZeroEntry]
-) -> HollowZeroMap:
+) -> Optional[HollowZeroMap]:
     """
     根据识别结果构造地图
     """
@@ -61,7 +61,10 @@ def construct_map_from_yolo_result(
         if node.entry.is_base:  # 只识别到底座的 赋值为未知
             node.entry = unknown
 
-    return construct_map_from_nodes(ctx, nodes, detect_result.run_time)
+    if len(nodes) > 0:  # 有识别到节点才认为是有地图
+        return construct_map_from_nodes(ctx, nodes, detect_result.run_time)
+    else:
+        return None
 
 
 def construct_map_from_nodes(
@@ -72,7 +75,16 @@ def construct_map_from_nodes(
     current_idx: Optional[int] = None
     for i in range(len(nodes)):
         if nodes[i].entry.entry_name == '当前':
-            current_idx = i
+            if current_idx is not None:
+                # 当出现多个[当前]节点时 说明上一次移动可能失败了 导致内存中有一个错误的节点
+                # 此时 只保留最新识别到的结果
+                if nodes[current_idx].check_time < nodes[i].check_time:
+                    # 将错误的[当前]节点 设置为未知 且0置信度 等待后续被识别结果覆盖
+                    nodes[current_idx].entry = ctx.hollow.data_service.name_2_entry['未知']
+                    nodes[current_idx].confidence = 0
+                    current_idx = i
+            else:
+                current_idx = i
 
     edges: dict[int, List[int]] = {}
 
@@ -199,6 +211,36 @@ def _add_directed_edge(edges: dict[int, List[int]], x: int, y: int) -> None:
         edges[x].append(y)
 
 
+def is_same_map(map_1: HollowZeroMap, map_2: HollowZeroMap) -> bool:
+    """
+    判断两个地图是否同一个地图
+    通常情况下，两个地图的差异是在一步移动之后产生的，因此大部分节点都应该一致
+    当相同节点数量 >= 1/2 地图节点时，认为地图一致
+    :param map_1: 地图1
+    :param map_2: 地图2
+    :return:
+    """
+    node_cnt_1 = len(map_1.nodes)
+    node_cnt_2 = len(map_2.nodes)
+
+    if node_cnt_1 == 0 and node_cnt_2 == 0:
+        return True
+    elif node_cnt_1 == 0 or node_cnt_2 == 0:
+        return False
+
+    same_node_cnt = 0
+    for node_1 in map_1.nodes:
+        for node_2 in map_2.nodes:
+            if is_same_node(node_1, node_2):
+                same_node_cnt += 1
+                break
+
+    # 极端情况下 是在3个格子的情况下移动 剩下2个格子
+    # 如果移动后有在内存将格子更新为当前 则本次识别的2个格子的应该跟之前的一样 因此至少有50%格子一致
+    # 必须要两个地图都有50%格子在另一张地图上 因为进入盲盒区域后 可能区域里只有少量格子 但跟外层的地图刚好重合
+    return same_node_cnt >= node_cnt_1 * 0.5 and same_node_cnt >= node_cnt_2 * 0.5
+
+
 def merge_map(ctx: ZContext, map_list: List[HollowZeroMap]):
     """
     将多个地图合并成一个
@@ -211,7 +253,7 @@ def merge_map(ctx: ZContext, map_list: List[HollowZeroMap]):
         for node in m.nodes:
             to_merge: Optional[HollowZeroMapNode] = None
             for existed in nodes:
-                if cal_utils.distance_between(node.pos.center, existed.pos.center) < 100:
+                if is_same_node_pos(node, existed):
                     to_merge = existed
                     break
 
@@ -224,6 +266,9 @@ def merge_map(ctx: ZContext, map_list: List[HollowZeroMap]):
                     to_merge.entry = node.entry
                 elif to_merge.entry.entry_name != '未知' and node.entry.entry_name == '未知':  # 新旧都是格子类型 新的是未知 保持不变
                     pass
+                elif to_merge.confidence > 0.95 and node.confidence > 0.95:
+                    if to_merge.check_time < node.check_time:  # 两者置信度都很高 保留时间最新的结果
+                        to_merge.entry = node.entry
                 elif to_merge.confidence < node.confidence:  # 新旧都是格子类型 旧的识别置信度低 将新的类型赋值上去
                     to_merge.entry = node.entry
                 elif to_merge.check_time < node.check_time:  # 新旧都是格子类型 新的识别时间更晚 将新的类型赋值上去
@@ -235,3 +280,34 @@ def merge_map(ctx: ZContext, map_list: List[HollowZeroMap]):
             max_check_time = m.check_time
 
     return construct_map_from_nodes(ctx, nodes, max_check_time)
+
+
+def is_same_node_pos(x: HollowZeroMapNode, y: HollowZeroMapNode) -> bool:
+    """
+    判断两个节点的坐标是否一致
+    """
+    if x is None or y is None:
+        return False
+    min_dis = min(x.pos.height, x.pos.width, y.pos.height, y.pos.width) // 2
+    return cal_utils.distance_between(x.pos.center, y.pos.center) < min_dis
+
+
+def is_same_node(x: HollowZeroMapNode, y: HollowZeroMapNode) -> bool:
+    """
+    判断两个节点是否同一个节点
+    """
+    if x is None or y is None:
+        return False
+    return x.entry.entry_name == y.entry.entry_name and is_same_node_pos(x, y)
+
+
+def get_node_index(current_map: HollowZeroMap, node: HollowZeroMapNode) -> int:
+    """
+    获取某个节点 在地图上的下标
+    @param current_map: 地图
+    @param node: 节点
+    @return: 下标
+    """
+    for i in range(len(current_map.nodes)):
+        if is_same_node(current_map.nodes[i], node):
+            return i
