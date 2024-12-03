@@ -1,4 +1,12 @@
-# 配队 莱卡恩 凯撒 苍角
+# 基础信息
+author: "DoctorReid"
+thanks: ""
+homepage: ""
+version: "1.0"
+team_list:
+  - ["莱卡恩", "凯撒", "苍角"]
+introduction: "纯整活 让狼哥在日常刷本露露脸"
+
 allow_ultimate:
   - agent_name: "莱卡恩"
 
@@ -15,6 +23,8 @@ t-chain-left: &t-chain-left
   - op_name: "按键-连携技-左"
   - op_name: "清除状态"
     state: "自定义-动作不打断"
+  - op_name: "清除状态"
+    state: "自定义-下场"
   - op_name: "设置状态"
     state: "自定义-连携技换人"
 
@@ -23,6 +33,8 @@ t-chain-right: &t-chain-right
   - op_name: "按键-连携技-右"
   - op_name: "清除状态"
     state: "自定义-动作不打断"
+  - op_name: "清除状态"
+    state: "自定义-下场"
   - op_name: "设置状态"
     state: "自定义-连携技换人"
 
@@ -34,6 +46,10 @@ t-dodge-caesar: &t-dodge-caesar
     state: "自定义-招架支援"
   - op_name: "切换角色"
     agent_name: "凯撒"
+  - op_name: "清除状态"
+    state: "自定义-动作不打断"
+  - op_name: "清除状态"
+    state: "自定义-下场"
 
 # 切换角色-凯撒
 t-switch-caesar: &t-switch-caesar
@@ -52,6 +68,10 @@ t-dodge-soukaku: &t-dodge-soukaku
     state: "自定义-招架支援"
   - op_name: "切换角色"
     agent_name: "苍角"
+  - op_name: "清除状态"
+    state: "自定义-动作不打断"
+  - op_name: "清除状态"
+    state: "自定义-下场"
 
 # 切换角色-苍角
 t-switch-soukaku: &t-switch-soukaku
@@ -86,14 +106,14 @@ scenes:
           - states: "[闪避识别-黄光]"
             sub_states:
               # 优先切凯撒进行上盾 核心持续时间30s
-              - states: "([后台-1-凯撒] | [后台-2-凯撒]) & ![自定义-凯撒-战意激昂, 0, 30]"
+              - states: "[后台-凯撒] & ![自定义-凯撒-战意激昂, 0, 25]"
                 operations: *t-dodge-caesar
 
               # 其次切苍角上BUFF
-              - states: "([后台-1-苍角] | [后台-2-苍角])"
+              - states: "[后台-苍角]"
                 sub_states:
                   # 1命BUFF持续30s
-                  - states: "![自定义-苍角-展旗, 0, 30]"
+                  - states: "![自定义-苍角-展旗, 0, 25]"
                     operations: *t-dodge-soukaku
 
                   # 连携技+1涡流 60能量发动特殊技 30能量+1涡流
@@ -106,11 +126,14 @@ scenes:
               - states: "![自定义-招架支援, 0, 9]"
                 sub_states:
                   # 如果苍角能量不足下次展旗 就优先切苍角
-                  - states: "[苍角-涡流]{1, 2} & ( ([后台-1-苍角] & ![后台-1-能量]{60, 120}) | ([后台-2-苍角] & ![后台-2-能量]{60, 120}) )"
+                  - states: "[苍角-涡流]{1, 2} & ( [后台-苍角] & ![苍角-能量]{60, 120} )"
+                    operations: *t-dodge-soukaku
+
+                  - states: "[苍角-涡流]{0, 0} & ( [后台-苍角] & ![苍角-能量]{90, 120} )"
                     operations: *t-dodge-soukaku
 
                   # 其余情况切凯撒
-                  - states: "[后台-1-凯撒] | [后台-2-凯撒]"
+                  - states: "[后台-凯撒]"
                     operations: *t-dodge-caesar
 
               # 其余情况闪避
@@ -159,29 +182,43 @@ scenes:
     handlers:
       - states: "[按键可用-连携技]"
         sub_states:
+          # 邦布的出场持续时间比较难评估
           - states: "[连携技-1-邦布]"
+            operations:
+              - op_name: "按键-连携技-左"
+              - op_name: "清除状态"
+                state: "自定义-动作不打断"
+              - op_name: "清除状态"
+                state: "自定义-下场"
+              - op_name: "等待秒数"
+                seconds: 3
+          # 凯撒没上buff的话 先出凯撒
+          - states: "([连携技-1-凯撒] | [连携技-2-凯撒]) & ![自定义-凯撒-战意激昂, 0, 25]"
+            sub_states:
+            - states: "[连携技-1-凯撒]"
+              operations: *t-chain-left
+            - states: "[连携技-2-凯撒]"
+              operations: *t-chain-right
+          # 苍角涡流不足时 先出苍角
+          - states: "([连携技-1-苍角] | [连携技-2-苍角]) & ![苍角-涡流]{0, 1}"
+            sub_states:
+            - states: "[连携技-1-苍角]"
+              operations: *t-chain-left
+            - states: "[连携技-2-苍角]"
+              operations: *t-chain-right
+          # 剩余情况 苍角-莱卡恩-凯撒
+          - states: "[连携技-1-苍角]"
             operations: *t-chain-left
-          - states: "[连携技-1-凯撒]"
-            operations: *t-chain-left
-          - states: "[连携技-2-凯撒]"
+          - states: "[连携技-2-苍角]"
             operations: *t-chain-right
           - states: "[连携技-1-莱卡恩]"
             operations: *t-chain-left
           - states: "[连携技-2-莱卡恩]"
             operations: *t-chain-right
-          - states: "[连携技-1-苍角]"
+          - states: "[连携技-1-凯撒]"
             operations: *t-chain-left
-          - states: "[连携技-2-苍角]"
+          - states: "[连携技-2-凯撒]"
             operations: *t-chain-right
-
-  - triggers: [ "前台-血量扣减" ]
-    interval: 2
-    handlers:
-      - states: "[前台-血量扣减]{1, 100} & ![自定义-动作不打断, 0, 30]"
-        operations:
-          # 由于每个角色的僵直不一样 由具体角色控制如何处理
-          - op_name: "设置状态"
-            state: "自定义-血量扣减"
 
   - triggers: [ ]
     interval: 0.02
@@ -192,19 +229,19 @@ scenes:
       - states: "[自定义-下场]"
         sub_states:
           # 上凯撒盾
-          - states: "![自定义-凯撒-战意激昂, 0, 30] & ( ([后台-1-凯撒] & [后台-1-能量]{40, 120}) | ([后台-2-凯撒] & [后台-2-能量]{40, 120}) )"
+          - states: "![自定义-凯撒-战意激昂, 0, 25] & [后台-凯撒] & [凯撒-能量]{40, 120}"
             operations: *t-switch-caesar
 
           # 上苍角buff
-          - states: "![自定义-苍角-展旗, 0, 30] & ( [后台-1-苍角] | [后台-2-苍角] )"
+          - states: "![自定义-苍角-展旗, 0, 25] & [后台-苍角]"
             sub_states:
               - states: "[苍角-涡流]{3, 3}"
                 operations: *t-switch-soukaku
 
-              - states: "[苍角-涡流]{1, 2} & ( ([后台-1-苍角] & [后台-1-能量]{60, 120}) | ([后台-2-苍角] & [后台-2-能量]{60, 120}) )"
+              - states: "[苍角-涡流]{1, 2} & [后台-苍角] & [苍角-能量]{60, 120}"
                 operations: *t-switch-soukaku
 
-              - states: "[苍角-涡流]{0, 0} & ( ([后台-1-苍角] & [后台-1-能量]{90, 120}) | ([后台-2-苍角] & [后台-2-能量]{90, 120}) )"
+              - states: "[苍角-涡流]{0, 0} & [后台-苍角] & [苍角-能量]{90, 120}"
                 operations: *t-switch-soukaku
 
           # 切回莱卡恩
@@ -234,7 +271,7 @@ scenes:
               - op_name: "按键-普通攻击"
                 pre_delay: 0.1
                 post_delay: 0.1
-                repeat: 13
+                repeat: 20
 
           # 有足够能量的话 就打一个特殊技能上盾再走
           # 有可能打出第一个盾击后 还不能切换到主C 这时候就不打第二个盾击浪费能量了
@@ -271,7 +308,7 @@ scenes:
                 repeat: 10
 
           # 连携技出场会触发展旗 判断涡流是否足够上buff
-          - states: "[自定义-连携技换人, 0, 4]"
+          - states: "[自定义-连携技换人, 0, 6]"
             sub_states:
               - states: "[苍角-涡流]{3, 3}"
                 operations:
@@ -286,13 +323,13 @@ scenes:
           - states: "[自定义-招架支援]"
             sub_states:
               # 如果涡流足够 就长按普攻接展旗
-              - states: "![自定义-苍角-展旗, 0, 30] & [苍角-涡流]{3, 3}"
+              - states: "![自定义-苍角-展旗, 0, 25] & [苍角-涡流]{3, 3}"
                 operations:
                   - op_name: "设置状态"
                     state: "自定义-动作不打断"
                   - op_name: "按键-普通攻击"
                     way: "按下"
-                    post_delay: 4
+                    post_delay: 5
                   - op_name: "设置状态"
                     state: "自定义-下场"
                   - op_name: "清除状态"
@@ -317,7 +354,7 @@ scenes:
                 state: "自定义-动作不打断"
               - op_name: "按键-特殊攻击"
                 way: "按下"
-                post_delay: 4
+                post_delay: 5
               - op_name: "设置状态"
                 state: "自定义-下场"
               - op_name: "清除状态"
@@ -332,7 +369,7 @@ scenes:
                 repeat: 3
               - op_name: "按键-特殊攻击"
                 way: "按下"
-                post_delay: 4
+                post_delay: 5
               - op_name: "设置状态"
                 state: "自定义-下场"
               - op_name: "清除状态"
@@ -347,7 +384,7 @@ scenes:
                 repeat: 6
               - op_name: "按键-特殊攻击"
                 way: "按下"
-                post_delay: 4
+                post_delay: 5
               - op_name: "设置状态"
                 state: "自定义-下场"
               - op_name: "清除状态"
@@ -362,7 +399,7 @@ scenes:
                 repeat: 12
               - op_name: "按键-特殊攻击"
                 way: "按下"
-                post_delay: 4
+                post_delay: 5
               - op_name: "设置状态"
                 state: "自定义-下场"
               - op_name: "清除状态"
@@ -404,19 +441,19 @@ scenes:
           - states: "![切换角色-莱卡恩]"
             sub_states:
               # 上凯撒盾
-              - states: "![自定义-凯撒-战意激昂, 0, 30] & ( ([后台-1-凯撒] & [后台-1-能量]{40, 120}) | ([后台-2-凯撒] & [后台-2-能量]{40, 120}) )"
+              - states: "![自定义-凯撒-战意激昂, 0, 25] & [后台-凯撒] & [凯撒-能量]{40, 120}"
                 operations: *t-switch-caesar
 
               # 上苍角buff
-              - states: "![自定义-苍角-展旗, 0, 30] & ( [后台-1-苍角] | [后台-2-苍角] )"
+              - states: "![自定义-苍角-展旗, 0, 25] & [后台-苍角]"
                 sub_states:
                   - states: "[苍角-涡流]{3, 3}"
                     operations: *t-switch-soukaku
 
-                  - states: "[苍角-涡流]{1, 2} & ( ([后台-1-苍角] & [后台-1-能量]{60, 120}) | ([后台-2-苍角] & [后台-2-能量]{60, 120}) )"
+                  - states: "[苍角-涡流]{1, 2} & [后台-苍角] & [苍角-能量]{60, 120}"
                     operations: *t-switch-soukaku
 
-                  - states: "[苍角-涡流]{0, 0} & ( ([后台-1-苍角] & [后台-1-能量]{90, 120}) | ([后台-2-苍角] & [后台-2-能量]{90, 120}) )"
+                  - states: "[苍角-涡流]{0, 0} & [后台-苍角] & [苍角-能量]{90, 120}"
                     operations: *t-switch-soukaku
 
           # 终结技 防止切换角色没切对 等一段时间再使用终结技
