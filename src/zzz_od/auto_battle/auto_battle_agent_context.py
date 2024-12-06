@@ -96,19 +96,19 @@ class TeamInfo:
                 return False
             self.agent_update_time = update_time
 
-            log.debug('当前角色列表 %s', [
-                i.agent.agent_name if i.agent is not None else 'none'
-                for i in self.agent_list
-            ])
+            # log.debug('当前角色列表 %s', [
+            #     i.agent.agent_name if i.agent is not None else 'none'
+            #     for i in self.agent_list
+            # ])
 
             self.agent_list = []
             for i in range(len(current_agent_list)):
                 energy = energy_list[i] if i < len(energy_list) else 0
                 self.agent_list.append(AgentInfo(current_agent_list[i], energy))
 
-            log.debug('更新后角色列表 %s 更新时间 %.4f',
-                      [i.agent.agent_name if i.agent is not None else 'none' for i in self.agent_list],
-                      update_time)
+            # log.debug('更新后角色列表 %s 更新时间 %.4f',
+            #           [i.agent.agent_name if i.agent is not None else 'none' for i in self.agent_list],
+            #           update_time)
 
             return True
 
@@ -166,9 +166,9 @@ class TeamInfo:
 
             self.agent_list = next_agent_list
 
-            log.debug('切换下一个 更新后角色列表 %s 更新时间 %.4f',
-                      [ i.agent.agent_name if i.agent is not None else 'none' for i in self.agent_list],
-                      update_time)
+            # log.debug('切换下一个 更新后角色列表 %s 更新时间 %.4f',
+            #           [ i.agent.agent_name if i.agent is not None else 'none' for i in self.agent_list],
+            #           update_time)
 
             return True
 
@@ -204,9 +204,9 @@ class TeamInfo:
                 next_agent_list.append(AgentInfo(None, 0))
             self.agent_list = next_agent_list
 
-            log.debug('切换上一个 更新后角色列表 %s 更新时间 %.4f',
-                      [ i.agent.agent_name if i.agent is not None else 'none' for i in self.agent_list],
-                      update_time)
+            # log.debug('切换上一个 更新后角色列表 %s 更新时间 %.4f',
+            #           [ i.agent.agent_name if i.agent is not None else 'none' for i in self.agent_list],
+            #           update_time)
 
             return True
 
@@ -576,7 +576,7 @@ class AutoBattleAgentContext:
             return records
         return []
 
-    def switch_quick_assist(self, update_time: float, update_state: bool = True) -> List[StateRecord]:
+    def switch_quick_assist(self, update_time: float, update_state: bool = True) -> Tuple[int, List[StateRecord]]:
         """
         切换到快速支援的角色
         :param update_time: 更新时间
@@ -598,13 +598,15 @@ class AutoBattleAgentContext:
                 switch_agent = agent
 
         if switch_agent is None:
-            return []
+            return 0, []
 
         target_agent_pos = self.team_info.get_agent_pos(switch_agent)
         if target_agent_pos == 2:  # 在下一个
-            return self.switch_next_agent(update_time, update_state=update_state)
+            return target_agent_pos, self.switch_next_agent(update_time, update_state=update_state)
         elif target_agent_pos == 3:  # 在上一个
-            return self.switch_prev_agent(update_time, update_state=update_state)
+            return target_agent_pos, self.switch_prev_agent(update_time, update_state=update_state)
+        else:
+            return 0, []
 
     def chain_left(self, update_time: float, update_state: bool = True) -> List[StateRecord]:
         """
