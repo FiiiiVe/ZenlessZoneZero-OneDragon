@@ -100,16 +100,16 @@ class LostVoidMoveByDet(ZOperation):
 
         # 需要按方向选的时候 按最大x值选
         # 入口时 从右往左选可以上楼梯
-        # 挚友会谈 从右往左选可以到商店
         self.choose_by_max_x: bool = self.current_region in [
-            LostVoidRegionType.ENTRY.value.value,
-            LostVoidRegionType.FRIENDLY_TALK.value.value
+            LostVoidRegionType.ENTRY,
         ]
 
         self.last_target_result: Optional[MoveTargetWrapper] = None  # 最后一次识别到的目标
         self.last_target_name: Optional[str] = None  # 最后识别到的交互目标名称
         self.same_target_times: int = 0  # 识别到相同目标的次数
         self.stuck_times: int = 0  # 被困次数
+
+        self.last_save_debug_image_time: float = 0  # 上一次保存debug图片的时间
 
     @node_from(from_name='移动', status='丢失目标')
     @node_from(from_name='脱困')
@@ -133,10 +133,16 @@ class LostVoidMoveByDet(ZOperation):
             if self.stop_when_disappear:
                 return self.round_fail('目标消失')
 
+            if self.last_target_result is not None:
+                # 曾经识别到过 可能被血条 或者其它东西遮住了 尝试往前走一点
+                self.ctx.controller.move_w(press=True, press_time=0.5, release=True)
+                self.last_target_result = None
+
             # 没找到目标 转动
             self.ctx.controller.turn_by_distance(-100)
             return self.round_retry('未找到目标', wait=0.5)
 
+        self.last_target_result = target_result
         pos = target_result.entire_rect.center
         turn = self.turn_to_target(pos)
         if turn:
@@ -168,6 +174,9 @@ class LostVoidMoveByDet(ZOperation):
             if self.stop_when_disappear:
                 return self.round_success(data=self.last_target_name)
             else:
+                if self.ctx.env_config.is_debug and screenshot_time - self.last_save_debug_image_time > 5:
+                    self.last_save_debug_image_time = screenshot_time
+                    self.save_screenshot()
                 return self.round_success(status='丢失目标', data=self.last_target_name)
 
         is_stuck = self.check_stuck(target_result)
@@ -257,22 +266,11 @@ class LostVoidMoveByDet(ZOperation):
         not_mixed_entry_list = [item for item in entry_list if not item.is_mixed]
         mixed_entry_list = [item for item in entry_list if item.is_mixed]
         if len(not_mixed_entry_list) > 0:
-            return self.get_entry_target_by_priority(entry_list)
+            return self.ctx.lost_void.get_entry_by_priority(entry_list)
         elif len(mixed_entry_list) > 0:
-            return self.get_entry_target_by_priority(mixed_entry_list)
+            return self.ctx.lost_void.get_entry_by_priority(mixed_entry_list)
         else:
             return None
-
-    def get_entry_target_by_priority(self, entry_list: List[MoveTargetWrapper]) -> Optional[MoveTargetWrapper]:
-        """
-        按优先级 选择下层入口
-        @param entry_list: 入口列表
-        @return:
-        """
-        if entry_list is None or len(entry_list) == 0:
-            return None
-
-        return entry_list[0]
 
     def check_stuck(self, new_target: MoveTargetWrapper) -> Optional[OperationRoundResult]:
         """
@@ -354,7 +352,7 @@ class LostVoidMoveByDet(ZOperation):
                 # 不考虑 [距离]白点
                 continue
 
-            if result.width > 40 and result.height > 40:
+            if result.width > 50 and result.height > 50:
                 return True
 
         return False

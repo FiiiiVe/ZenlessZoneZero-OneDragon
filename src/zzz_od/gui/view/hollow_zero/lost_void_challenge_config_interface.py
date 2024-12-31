@@ -9,7 +9,7 @@ from one_dragon.utils.i18_utils import gt
 from phosdeiz.gui.widgets import Column, ComboBox, Row
 from zzz_od.application.battle_assistant.auto_battle_config import get_auto_battle_op_config_list
 from zzz_od.application.hollow_zero.lost_void.lost_void_challenge_config import LostVoidChallengeConfig, \
-    get_lost_void_challenge_new_name, get_all_lost_void_challenge_config
+    get_lost_void_challenge_new_name, get_all_lost_void_challenge_config, LostVoidPeriodBuffNo, LostVoidBuyOnlyPriority
 from zzz_od.context.zzz_context import ZContext
 
 
@@ -76,6 +76,14 @@ class LostVoidChallengeConfigInterface(VerticalScrollInterface):
         self.auto_battle_opt.value_changed.connect(self._on_auto_battle_config_changed)
         widget.add_widget(self.auto_battle_opt)
 
+        self.period_buff_no_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='周期增益',
+                                                      options_enum=LostVoidPeriodBuffNo)
+        widget.add_widget(self.period_buff_no_opt)
+
+        self.buy_only_priority_opt = ComboBoxSettingCard(icon=FluentIcon.GAME, title='只购买优先级',
+                                                         options_enum=LostVoidBuyOnlyPriority)
+        widget.add_widget(self.buy_only_priority_opt)
+
         widget.add_stretch(1)
         return widget
 
@@ -84,7 +92,7 @@ class LostVoidChallengeConfigInterface(VerticalScrollInterface):
 
         artifact_priority_widget = Column()
         widget.add_widget(artifact_priority_widget)
-        artifact_priority_title = SubtitleLabel(text='藏品优先级 未生效')
+        artifact_priority_title = SubtitleLabel(text='藏品优先级')
         artifact_priority_widget.v_layout.addWidget(artifact_priority_title)
         self.artifact_priority_input = PlainTextEdit()
         self.artifact_priority_input.textChanged.connect(self._on_artifact_priority_changed)
@@ -92,7 +100,7 @@ class LostVoidChallengeConfigInterface(VerticalScrollInterface):
 
         region_priority_widget = Column()
         widget.add_widget(region_priority_widget)
-        region_priority_title = SubtitleLabel(text='区域类型优先级 未生效')
+        region_priority_title = SubtitleLabel(text='区域类型优先级')
         region_priority_widget.v_layout.addWidget(region_priority_title)
         self.region_type_priority_input = PlainTextEdit()
         self.region_type_priority_input.textChanged.connect(self._on_region_type_priority_changed)
@@ -127,6 +135,8 @@ class LostVoidChallengeConfigInterface(VerticalScrollInterface):
 
         self.name_opt.setDisabled(not chosen or is_sample)
         self.auto_battle_opt.setDisabled(not chosen or is_sample)
+        self.period_buff_no_opt.setDisabled(not chosen or is_sample)
+        self.buy_only_priority_opt.setDisabled(not chosen or is_sample)
         self.artifact_priority_input.setDisabled(not chosen or is_sample)
         self.region_type_priority_input.setDisabled(not chosen or is_sample)
 
@@ -136,6 +146,9 @@ class LostVoidChallengeConfigInterface(VerticalScrollInterface):
         if chosen:
             self.name_opt.setValue(self.chosen_config.module_name)
             self.auto_battle_opt.setValue(self.chosen_config.auto_battle)
+            self.period_buff_no_opt.init_with_adapter(self.chosen_config.get_prop_adapter('period_buff_no'))
+            self.buy_only_priority_opt.init_with_adapter(self.chosen_config.get_prop_adapter('buy_only_priority'))
+            self.buy_only_priority_opt.setContent('达到刷新次数前 只购买优先级内的藏品')  # 不知道为啥需要在这里设置才生效
 
             self.artifact_priority_input.blockSignals(True)
             self.artifact_priority_input.setPlainText(self.chosen_config.artifact_priority_str)

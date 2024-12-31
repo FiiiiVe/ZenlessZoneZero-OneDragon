@@ -17,29 +17,28 @@ class LostVoidChooseGear(ZOperation):
     def __init__(self, ctx: ZContext):
         ZOperation.__init__(self, ctx, op_name='迷失之地-武备选择')
 
-    @operation_node(name='等待加载', node_max_retry_times=10, is_start_node=True)
-    def wait_loading(self) -> OperationRoundResult:
-        screen_name = self.check_and_update_current_screen()
-        if screen_name == '迷失之地-武备选择':
-            return self.round_success()
-        else:
-            return self.round_retry(wait=1)
-
-    @node_from(from_name='等待加载')
-    @operation_node(name='选择武备')
+    @operation_node(name='选择武备', is_start_node=True)
     def choose_gear(self) -> OperationRoundResult:
         screen_list = []
         for i in range(10):
             screen_list.append(self.screenshot())
             time.sleep(0.1)
 
+        screen_name = self.check_and_update_current_screen(screen_list[0])
+        if screen_name != '迷失之地-武备选择':
+            # 进入本指令之前 有可能识别错画面
+            return self.round_retry(status=f'当前画面 {screen_name}', wait=1)
+
         gear_list = self.get_gear_pos(screen_list)
         if len(gear_list) == 0:
             # 识别耗时比较长 这里返回就不等待了
             return self.round_retry(status='无法识别武备')
 
-        # TODO 加入优先级
-        self.ctx.controller.click(gear_list[0].center)
+        priority_list = self.ctx.lost_void.get_artifact_by_priority(gear_list, 1)
+        for art in priority_list:
+            self.ctx.controller.click(art.center)
+            time.sleep(0.5)
+
         return self.round_success(wait=0.5)
 
     def get_gear_pos(self, screen_list: List[MatLike]) -> List[MatchResult]:
@@ -54,7 +53,6 @@ class LostVoidChooseGear(ZOperation):
             for i in self.ctx.lost_void.all_artifact_list
             if i.template_id is not None
         ]
-        # TODO 后续只识别优先级中的武备
 
         result_list: List[MatchResult] = []
 

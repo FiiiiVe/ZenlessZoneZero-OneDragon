@@ -7,7 +7,7 @@ from one_dragon.base.matcher.match_result import MatchResult
 from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
-from one_dragon.utils import cv2_utils, cal_utils, str_utils
+from one_dragon.utils import cv2_utils, str_utils
 from one_dragon.utils.i18_utils import gt
 from zzz_od.context.zzz_context import ZContext
 from zzz_od.operation.zzz_operation import ZOperation
@@ -20,18 +20,14 @@ class LostVoidChooseCommon(ZOperation):
 
         self.to_choose_num: int = 1  # 需要选择的数量
 
-    @operation_node(name='等待加载', node_max_retry_times=10, is_start_node=True)
-    def wait_loading(self) -> OperationRoundResult:
-        screen_name = self.check_and_update_current_screen()
-        if screen_name == '迷失之地-通用选择':
-            return self.round_success()
-        else:
-            return self.round_retry(status=f'当前画面 {screen_name}', wait=1)
-
-    @node_from(from_name='等待加载')
-    @operation_node(name='选择')
+    @operation_node(name='选择', is_start_node=True)
     def choose_gear(self) -> OperationRoundResult:
         screen = self.screenshot()
+
+        screen_name = self.check_and_update_current_screen()
+        if screen_name != '迷失之地-通用选择':
+            # 进入本指令之前 有可能识别错画面
+            return self.round_retry(status=f'当前画面 {screen_name}', wait=1)
 
         result = self.round_by_find_area(screen, '迷失之地-通用选择', '标题-武备已升级')
         if result.is_success:
@@ -41,11 +37,10 @@ class LostVoidChooseCommon(ZOperation):
         if len(art_list) == 0:
             return self.round_retry(status='无法识别藏品', wait=1)
 
-        # TODO 加入优先级
-        for i in range(self.to_choose_num):
-            if i < len(art_list):
-                self.ctx.controller.click(art_list[i].center)
-                time.sleep(0.5)
+        priority_list = self.ctx.lost_void.get_artifact_by_priority(art_list, self.to_choose_num)
+        for art in priority_list:
+            self.ctx.controller.click(art.center)
+            time.sleep(0.5)
 
         return self.round_success()
 

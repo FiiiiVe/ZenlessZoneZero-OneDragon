@@ -45,6 +45,12 @@ class LostVoidApp(ZApplication):
     def check_initial_screen(self) -> OperationRoundResult:
         screen = self.screenshot()
 
+        # 特殊兼容 在挑战区域开始
+        result = self.round_by_find_and_click_area(screen, '迷失之地-大世界', '按钮-挑战-确认')
+        if result.is_success:
+            self.next_region_type = LostVoidRegionType.CHANLLENGE_TIME_TRAIL
+            return self.round_wait(result.status, wait=1)
+
         screen_name, can_go = self.check_screen_with_can_go(screen, '迷失之地-战线肃清')
         if screen_name is None:
             return self.round_retry(Operation.STATUS_SCREEN_UNKNOWN, wait=0.5)
@@ -52,7 +58,7 @@ class LostVoidApp(ZApplication):
         if screen_name == '迷失之地-大世界':
             return self.round_success('迷失之地-大世界')
 
-        if can_go:
+        if can_go or screen_name == '迷失之地-战线肃清':
             return self.round_success('可前往战线肃清')
 
         can_go = self.check_current_can_go('快捷手册-作战')
@@ -95,6 +101,12 @@ class LostVoidApp(ZApplication):
         return self.round_by_goto_screen(screen_name='迷失之地-战线肃清')
 
     @node_from(from_name='前往战线肃清')
+    @operation_node(name='选择增益')
+    def choose_buff(self) -> OperationRoundResult:
+        return self.round_by_click_area('迷失之地-战线肃清', f'周期增益-{self.ctx.lost_void.challenge_config.period_buff_no}',
+                                        success_wait=1, retry_wait=1)
+
+    @node_from(from_name='选择增益')
     @operation_node(name='下一步')
     def click_next(self) -> OperationRoundResult:
         return self.round_by_find_and_click_area(screen_name='通用-出战', area_name='按钮-下一步',
@@ -113,13 +125,13 @@ class LostVoidApp(ZApplication):
     @node_from(from_name='层间移动')
     @operation_node(name='层间移动')
     def run_level(self) -> OperationRoundResult:
-        log.debug(f'推测楼层类型 {self.next_region_type}')
+        log.debug(f'推测楼层类型 {self.next_region_type.value.value}')
         op = LostVoidRunLevel(self.ctx, self.next_region_type)
         op_result = op.execute()
         if op_result.success:
             if op_result.status == LostVoidRunLevel.STATUS_NEXT_LEVEL:
                 if op_result.data is not None:
-                    self.next_region_type = op_result.data
+                    self.next_region_type = LostVoidRegionType.from_value(op_result.data)
                 else:
                     self.next_region_type = LostVoidRegionType.ENTRY
 
@@ -141,17 +153,17 @@ class LostVoidApp(ZApplication):
         return self.round_success(LostVoidApp.STATUS_AGAIN)
 
     @node_from(from_name='通关后处理')
-    @operation_node(name='打开悬赏奖励')
+    @operation_node(name='打开悬赏委托')
     def open_reward_list(self) -> OperationRoundResult:
-        return self.round_by_find_and_click_area(screen_name='迷失之地-入口', area_name='按钮-悬赏奖励',
-                                                 until_not_find_all=[('迷失之地-入口', '按钮-悬赏奖励')],
+        return self.round_by_find_and_click_area(screen_name='迷失之地-入口', area_name='按钮-悬赏委托',
+                                                 until_not_find_all=[('迷失之地-入口', '按钮-悬赏委托')],
                                                  success_wait=1, retry_wait=1)
 
-    @node_from(from_name='打开悬赏奖励')
+    @node_from(from_name='打开悬赏委托')
     @operation_node(name='全部领取')
     def claim_all(self) -> OperationRoundResult:
-        return self.round_by_find_and_click_area(screen_name='迷失之地-入口', area_name='按钮-悬赏奖励-全部领取',
-                                                 until_not_find_all=[('迷失之地-入口', '按钮-悬赏奖励-全部领取')],
+        return self.round_by_find_and_click_area(screen_name='迷失之地-入口', area_name='按钮-悬赏委托-全部领取',
+                                                 until_not_find_all=[('迷失之地-入口', '按钮-悬赏委托-全部领取')],
                                                  success_wait=1, retry_wait=1)
 
     @node_from(from_name='全部领取')

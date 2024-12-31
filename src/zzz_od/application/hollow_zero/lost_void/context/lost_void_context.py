@@ -3,6 +3,7 @@ from cv2.typing import MatLike
 from typing import Optional, List, Tuple
 
 from one_dragon.base.config.yaml_operator import YamlOperator
+from one_dragon.base.matcher.match_result import MatchResult
 from one_dragon.base.screen import screen_utils
 from one_dragon.utils import os_utils, str_utils
 from one_dragon.utils.i18_utils import gt
@@ -10,6 +11,7 @@ from zzz_od.application.hollow_zero.lost_void.context.lost_void_artifact import 
 from zzz_od.application.hollow_zero.lost_void.context.lost_void_detector import LostVoidDetector
 from zzz_od.application.hollow_zero.lost_void.lost_void_challenge_config import LostVoidRegionType, \
     LostVoidChallengeConfig
+from zzz_od.application.hollow_zero.lost_void.operation.lost_void_move_by_det import MoveTargetWrapper
 from zzz_od.auto_battle import auto_battle_utils
 from zzz_od.auto_battle.auto_battle_dodge_context import YoloStateEventEnum
 from zzz_od.auto_battle.auto_battle_operator import AutoBattleOperator
@@ -220,3 +222,96 @@ class LostVoidContext:
                 error_msg += f'输入非法 {i}'
 
         return filter_result_list, error_msg
+
+    def get_artifact_by_priority(self, artifact_list: List[MatchResult], choose_num: int,
+                                 only_priority: bool = False) -> List[MatchResult]:
+        """
+        根据优先级 返回需要选择的藏品
+        :param artifact_list: 识别到的藏品结果
+        :param choose_num: 需要选择的数量
+        :param only_priority: 是否只保留优先级中的
+        :return: 按优先级选择的结果
+        """
+        priority_idx_list: List[int] = []  # 优先级排序的下标
+
+        # 按优先级顺序 将匹配的藏品下标加入
+        for priority in self.challenge_config.artifact_priority:
+            split_idx = priority.find(' ')
+            if split_idx != -1:
+                cate_name = priority[:split_idx]
+                item_name = priority[split_idx+1:]
+            else:
+                cate_name = priority
+                item_name = ''
+
+            for idx in range(len(artifact_list)):
+                if idx in priority_idx_list:  # 已经加入过了
+                    continue
+
+                artifact: LostVoidArtifact = artifact_list[idx].data
+
+                if artifact.category != cate_name:
+                    continue
+
+                if item_name == '':
+                    priority_idx_list.append(idx)
+                    continue
+
+                if item_name in ['S', 'A', 'B']:
+                    if artifact.level == item_name:
+                        priority_idx_list.append(idx)
+                    continue
+
+                if item_name == artifact.name:
+                    priority_idx_list.append(idx)
+
+        # 将剩余的 按等级加入
+        if not only_priority:
+            for level in ['S', 'A', 'B']:
+                for idx in range(len(artifact_list)):
+                    if idx in priority_idx_list:  # 已经加入过了
+                        continue
+
+                    artifact: LostVoidArtifact = artifact_list[idx].data
+
+                    if artifact.level == level:
+                        priority_idx_list.append(idx)
+
+        result_list: List[MatchResult] = []
+        for i in range(choose_num):
+            if i >= len(priority_idx_list):
+                continue
+            result_list.append(artifact_list[priority_idx_list[i]])
+
+        return result_list
+
+    def get_entry_by_priority(self, entry_list: List[MoveTargetWrapper]) -> Optional[MoveTargetWrapper]:
+        """
+        根据优先级 返回一个前往的入口
+        多个相同入口时选择最右 (因为丢失寻找目标的时候是往左转找)
+        :param entry_list:
+        :return:
+        """
+        if entry_list is None or len(entry_list) == 0:
+            return None
+
+        for priority in self.challenge_config.region_type_priority:
+            target: Optional[MoveTargetWrapper] = None
+
+            for entry in entry_list:
+                for target_name in entry.target_name_list:
+                    if target_name != priority:
+                        continue
+
+                    if target is None or entry.entire_rect.x1 > target.entire_rect.x1:
+                        target = entry
+
+            if target is not None:
+                return target
+
+        target: Optional[MoveTargetWrapper] = None
+        for entry in entry_list:
+            if target is None or entry.entire_rect.x1 > target.entire_rect.x1:
+                target = entry
+
+        return target
