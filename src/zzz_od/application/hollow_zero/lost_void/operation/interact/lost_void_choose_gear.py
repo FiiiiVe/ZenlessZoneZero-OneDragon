@@ -22,7 +22,7 @@ class LostVoidChooseGear(ZOperation):
     @operation_node(name='选择武备', is_start_node=True)
     def choose_gear(self) -> OperationRoundResult:
         screen_list = []
-        for i in range(10):
+        for i in range(20):
             screen_list.append(self.screenshot())
             time.sleep(0.1)
 
@@ -78,7 +78,7 @@ class LostVoidChooseGear(ZOperation):
                     source_kps, source_desc,
                     template_kps, template_desc,
                     template_width=template.raw.shape[1], template_height=template.raw.shape[0],
-                    knn_distance_percent=0.7
+                    knn_distance_percent=0.5
                 )
 
                 if mr is None:
@@ -162,12 +162,7 @@ def __debug():
     ctx.start_running()
 
     op = LostVoidChooseGear(ctx)
-    # op.execute()
-
-    from one_dragon.utils import debug_utils
-    screen = debug_utils.get_debug_image('gear')
-    # op.get_gear_pos([screen], only_no_level=False)
-    op.get_gear_pos([screen], only_no_level=True)
+    op.execute()
 
 
 if __name__ == '__main__':
