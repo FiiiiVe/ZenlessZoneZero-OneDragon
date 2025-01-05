@@ -21,10 +21,14 @@ class LostVoidChooseGear(ZOperation):
 
     @operation_node(name='选择武备', is_start_node=True)
     def choose_gear(self) -> OperationRoundResult:
+        area = self.ctx.screen_loader.get_area('迷失之地-通用选择', '文本-详情')
+        self.ctx.controller.mouse_move(area.center)
+        time.sleep(0.1)
+
         screen_list = []
-        for i in range(20):
+        for i in range(10):
             screen_list.append(self.screenshot())
-            time.sleep(0.1)
+            time.sleep(0.2)
 
         screen_name = self.check_and_update_current_screen(screen_list[0])
         if screen_name != '迷失之地-武备选择':
