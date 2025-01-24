@@ -43,21 +43,11 @@ class ChargePlanApp(ZApplication):
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='打开菜单')
-    @operation_node(name='快捷手册-训练')
-    def goto_training(self) -> OperationRoundResult:
-        return self.round_by_goto_screen(screen_name='快捷手册-训练', success_wait=1, retry_wait=1)
-
-    @node_from(from_name='快捷手册-训练')
     @operation_node(name='识别电量')
     def check_charge_power(self) -> OperationRoundResult:
         screen = self.screenshot()
-        result = self.round_by_find_area(screen, '快捷手册-训练', '按钮-奖励')
-        if result.is_success:
-            # 实战模拟式的电量位置
-            area = self.ctx.screen_loader.get_area('快捷手册-训练', '文本-电量2')
-        else:
-            # 其他两个的电量位置
-            area = self.ctx.screen_loader.get_area('快捷手册-训练', '文本-电量')
+        # 不能在快捷手册里面识别电量 因为每个人的备用电量不一样
+        area = self.ctx.screen_loader.get_area('菜单', '文本-电量')
         part = cv2_utils.crop_image_only(screen, area.rect)
         ocr_result = self.ctx.ocr.run_ocr_single_line(part)
         digit = str_utils.get_positive_digits(ocr_result, None)
@@ -79,7 +69,7 @@ class ChargePlanApp(ZApplication):
 
         self.next_plan = next_plan
         self.next_can_run_times = 0
-        need_charge_power = 0
+        need_charge_power = 1000
         if self.next_plan.category_name == '实战模拟室' and self.next_plan.card_num == CardNumEnum.DEFAULT.value.value:
             self.need_to_check_power_in_mission = True
         else:
@@ -95,10 +85,11 @@ class ChargePlanApp(ZApplication):
         if not self.need_to_check_power_in_mission and self.charge_power < need_charge_power:
             return self.round_fail(f'电量不足 {need_charge_power}')
 
-        self.next_can_run_times = self.charge_power // need_charge_power
-        max_need_run_times = self.next_plan.plan_times - self.next_plan.run_times
-        if self.next_can_run_times > max_need_run_times:
-            self.next_can_run_times = max_need_run_times
+        if not self.need_to_check_power_in_mission:
+            self.next_can_run_times = self.charge_power // need_charge_power
+            max_need_run_times = self.next_plan.plan_times - self.next_plan.run_times
+            if self.next_can_run_times > max_need_run_times:
+                self.next_can_run_times = max_need_run_times
 
         op = TransportByCompendium(self.ctx,
                                    next_plan.tab_name,
